@@ -1,12 +1,27 @@
+const http = require('http');
 const Git = require('nodegit');
 const express = require('express');
 const bodyParser = require('body-parser');
 const url = require('url');
 const mkdirp = require('mkdirp');
+const socket_io = require('socket.io');
+const crypto = require('crypto');
 
 const app = express();
 const port = 9119;
-const root = 'reveal-root/';
+
+const server = http.createServer(app);
+const io = socket_io(server);
+
+const config = {
+    secret: '1234',
+    port: 9119,
+    addr: '0.0.0.0',
+    repo_root: 'repo-root',
+    repo_prefixes: [
+        'https://git.xobs.io/xobs'
+    ]
+};
 
 function update_repo(repo) {
     console.log('updating repo ' + repo);
@@ -14,8 +29,23 @@ function update_repo(repo) {
         console.log('setting head on repo');
         repo.setHead('FETCH_HEAD').then(function() {
             console.log('checking out origin/master');
-            repo.checkoutBranch('origin/master');
+            repo.checkoutBranch('origin/master').then(() => {
+                return repo.getReferenceCommit('refs/remotes/origin/master');
+            }).catch((e) => {
+                console.log('unable to get reference commit:');
+                console.log(e);
+            }).then(function (commit) {
+                Git.Reset.reset(repo, commit, 3, {});
+            }).catch((e) => {
+                console.log('couldn\'t check out master');
+            });
+        }).catch((e) => {
+            console.log('Couldn\'t set head:');
+            console.log(e);
         });
+    }).catch((e) => {
+        console.log('couldn\'t fetch origin:');
+        console.log(e);
     });
 }
 
@@ -26,36 +56,14 @@ function redeploy_repo(url, path, name) {
 
     var repo = Git.Repository.open(new_path)
         .then(update_repo)
-        .catch(function(e) {
-            console.log('Unable to update, trying clone: ');
+        .catch((e) => {
+            console.log('unable to update, trying clone: ');
             console.log(e);
-            Git.Clone(url, new_path).then(update_repo).catch(function(e) {
-                console.log('Unable to clone:');
+            Git.Clone(url, new_path).then(update_repo).catch((e) => {
+                console.log('unable to clone:');
                 console.log(e);
             });
         });
-/*
-    let mut new_path = path.to_path_buf();
-    new_path.push(name);
-    eprintln!("Cloning {} into {:?} ({:?} / {})", url, new_path, path, name);
-
-    let repo = match Repository::open(&new_path) {
-        Ok(repo) => repo,
-        Err(e) => {
-            eprintln!("can't open repo, going to try cloning it: {}", e.description());
-            match Repository::clone(url, &new_path) {
-                Ok(repo) => repo,
-                Err(e) => panic!("failed to clone: {}", e),
-            }
-        }
-    };
-    
-    repo.find_remote("origin")?.fetch(&["master"], None, None)?;
-    repo.set_head("FETCH_HEAD")?;
-    repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force().use_theirs(true)))?;
-
-    Ok(())
-*/
 }
 
 function webhook(config, req, res) {
@@ -105,17 +113,50 @@ function webhook(config, req, res) {
     res.send('Ok');
 }
 
-const config = {
-    secret: "1234",
-    repo_root: "repo-root",
-    repo_prefixes: [
-        "https://git.xobs.io/xobs"
-    ]
+var createHash = function(secret) {
+    var cipher = crypto.createCipher('blowfish', secret);
+    return(cipher.final('hex'));
 };
+
+const brown = '\033[33m',
+      green = '\033[32m',
+      reset = '\033[0m';
+
+io.on('connection', (socket) => {
+    socket.on('multiplex-statechanged', (data) => {
+        if (typeof data.secret == 'undefined' 
+                || data.secret == null
+                || data.secret === '')
+            return;
+        if (createHash(data.secret) === data.socketId) {
+            data.secret = null;
+            socket.broadcast.emit(data.socketId, data);
+            console.log(`${brown}reveal.js:${reset} master on ${green}data.socketId${reset}`);
+        }
+    });
+});
 
 app.use(bodyParser.json()); // Parse application/json
 app.use(bodyParser.urlencoded({ extended: true })); // Parse application/x-www-form-urlencoded
 
-app.post('/webhook', function (req, res) { return webhook(config, req, res); });
+app.post('/webhook', (req, res) => { return webhook(config, req, res); });
+app.get("/token", function(req,res) {
+    var ts = new Date().getTime();
+    var rand = Math.floor(Math.random()*9999999);
+    var origsecret = ts.toString() + rand.toString();
+    var cipher = crypto.createCipher('blowfish', origsecret);
+    var secret = cipher.final('hex');
+    res.send({secret: secret, socketId: createHash(secret)});
+});
+app.get('/', (req, res) => {
+    res.writeHead(200, {'Content-Type': 'text/html'});
+
+//    var stream = fs.createReadStream('index.html');
+//    stream.on('error', (error) => {
+        res.write('<style>body{font-family: sans-serif;}</style><h2>reveal.js multiplex server.</h2><a href="/token">Generate token</a>');
+        res.end();
+//    });
+//    stream.on('readable', () => { stream.pipe(res); });
+});
 app.use(express.static(config.repo_root));
-app.listen(port, () => console.log(`Example app listening on port ${port}!`));
+server.listen(config.port, config.addr, () => console.log(`Example app listening on port ${config.port}!`));
