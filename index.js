@@ -140,16 +140,16 @@ io.on('connection', (socket) => {
         if (typeof data.secret == 'undefined' 
                 || data.secret == null
                 || data.secret === '') {
-            console.log(`${brown}reveal.js:${reset} secret doesn't match (or is undefined)`);
+            console.log(`${progname} no secret specified`);
             return;
         }
         if (createHash(data.secret) === data.socketId) {
             data.secret = null;
             socket.broadcast.emit(data.socketId, data);
-            console.log(`${brown}reveal.js:${reset} master on ${green}data.socketId${reset}`);
+            console.log(`${progname} master connected on ${green}data.socketId${reset}`);
         }
         else {
-            console.log(`${progname}given secret ${red}${data.secret}${reset} doesn't match`);
+            console.log(`${progname} given secret ${red}${data.secret}${reset} doesn't match`);
         }
     });
 });
