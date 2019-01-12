@@ -146,7 +146,7 @@ io.on('connection', (socket) => {
         if (createHash(data.secret) === data.socketId) {
             data.secret = null;
             socket.broadcast.emit(data.socketId, data);
-            console.log(`${progname} master connected on ${green}data.socketId${reset}`);
+            console.log(`${progname} master connected on ${green}${data.socketId}${reset}`);
         }
         else {
             console.log(`${progname} given secret ${red}${data.secret}${reset} doesn't match`);
