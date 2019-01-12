@@ -30,7 +30,7 @@ program
 
 const default_prefixes = process.env['RV_PREFIXES'] ? process.env['RV_PREFIXES'].split(',') : [ 'https://git.xobs.io/xobs' ];
 const config = {
-    secret: program.secret || process.env['RV_SECRET'] || '1234',
+    secret: program.secret || process.env['RV_SECRET'] || null,
     port: program.port || process.env['RV_LISTEN_PORT'] || 9119,
     addr: process.env['RV_LISTEN_ADDR'] || '0.0.0.0',
     repo_root: program.repoRoot || process.env['RV_ROOT'] || 'repo-root',
@@ -38,9 +38,8 @@ const config = {
 };
 
 function update_repo(repo) {
-    console.log('updating repo ' + repo);
+    console.log(`${progname} updating repo ${green}${repo}${reset}`);
     repo.fetch('origin').then(function() {
-        console.log('setting head on repo');
         repo.setHead('FETCH_HEAD').then(function() {
             console.log(`${progname} checking out origin/master`);
             repo.checkoutBranch('origin/master').then(() => {
@@ -90,9 +89,10 @@ function webhook(config, req, res) {
     const wh = req.body;
 
     // Ensure the secret is present, and matches
-    console.log('secret: ' + config['secret'] + ', wh: ' + wh['secret']);
-    if (!config['secret'] || !wh['secret'] || config['secret'] !== wh['secret'])
-        return res.status(403).send('invalid secret token');
+    if (config['secret']) {
+        if (!wh['secret'] || config['secret'] !== wh['secret'])
+            return res.status(403).send('invalid secret token');
+    }
 
     // Reference the repository node, which must exist
     const repository = wh['repository'];
@@ -116,7 +116,7 @@ function webhook(config, req, res) {
 
     // Figure out where to place the repo
     const website_url = url.parse(repository['website']);
-    console.log('website_url: ' + website_url + ', repo: ' + repository['website'] + ', pathname: ' + website_url.pathname);
+    // console.log('website_url: ' + website_url + ', repo: ' + repository['website'] + ', pathname: ' + website_url.pathname);
     if (!website_url || !website_url.pathname)
         return res.status(403).send('missing "website" parameter');
 
@@ -124,7 +124,7 @@ function webhook(config, req, res) {
     if (!path || path === '.' || path === '..' || path === '')
         return res.status(403).send('"website" parameter is not valid');
 
-    console.log(`deploying to ${path} at ${config.repo_root} from ${html_url}`);
+    // console.log(`deploying to ${path} at ${config.repo_root} from ${html_url}`);
 
     redeploy_repo(html_url, config.repo_root, path);
     res.send('Ok');
