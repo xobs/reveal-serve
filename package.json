@@ -6,8 +6,12 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "",
-  "license": "ISC",
+  "author": "Sean Cross <sean@xobs.io>",
+  "license": "BSD-3-Clause",
+  "repository": {
+    "type" : "git",
+    "url" : "https://github.com/xobs/reveal-serve.git"
+  },
   "dependencies": {
     "body-parser": "^1.18.3",
     "commander": "^2.19.0",
