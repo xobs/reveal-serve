@@ -1,6 +1,7 @@
 FROM node:8
 
-COPY . /img
+COPY --chown=node . /img
+USER node
 WORKDIR /img
 RUN npm i
 EXPOSE 9119
