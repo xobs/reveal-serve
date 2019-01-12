@@ -147,6 +147,9 @@ io.on('connection', (socket) => {
 app.use(bodyParser.json()); // Parse application/json
 app.use(bodyParser.urlencoded({ extended: true })); // Parse application/x-www-form-urlencoded
 
+app.all(/\.git/, (req, res) => {
+    res.sendStatus(404);
+});
 app.post('/webhook', (req, res) => { return webhook(config, req, res); });
 app.get("/token", function(req,res) {
     var ts = new Date().getTime();
