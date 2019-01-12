@@ -6,6 +6,7 @@ const url = require('url');
 const mkdirp = require('mkdirp');
 const socket_io = require('socket.io');
 const crypto = require('crypto');
+const program = require('commander');
 
 const app = express();
 const port = 9119;
@@ -13,14 +14,21 @@ const port = 9119;
 const server = http.createServer(app);
 const io = socket_io(server);
 
+program
+    .version('1.0')
+    .option('-s, --secret <s>', 'Secret from Git Webhook')
+    .option('-p, --port <n>', 'Port to listen to', parseInt)
+    .option('-r, --repo-root <root>', 'Root for repo and web stuff')
+    .option('-m, --repo-prefix <prefix>', 'Add a URI to an allowed repo prefix', (val, memo) => { memo.push(val) }, [])
+    .parse(process.argv);
+
+const default_prefixes = process.env['RV_PREFIXES'] ? process.env['RV_PREFIXES'].split(',') : [ 'https://git.xobs.io/xobs' ];
 const config = {
-    secret: '1234',
-    port: 9119,
-    addr: '0.0.0.0',
-    repo_root: 'repo-root',
-    repo_prefixes: [
-        'https://git.xobs.io/xobs'
-    ]
+    secret: program.secret || process.env['RV_SECRET'] || '1234',
+    port: program.port || process.env['RV_LISTEN_PORT'] || 9119,
+    addr: process.env['RV_LISTEN_ADDR'] || '0.0.0.0',
+    repo_root: program.repoRoot || process.env['RV_ROOT'] || 'repo-root',
+    repo_prefixes: program.repoPrefix.length ? program.repoPrefix : default_prefixes
 };
 
 function update_repo(repo) {
