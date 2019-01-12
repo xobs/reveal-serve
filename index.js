@@ -14,6 +14,12 @@ const port = 9119;
 const server = http.createServer(app);
 const io = socket_io(server);
 
+const brown = '\033[33m',
+      green = '\033[32m',
+      red   = '\033[32m',
+      reset = '\033[0m';
+const progname = `${brown}reveal-sync:${reset}`
+
 program
     .version('1.0')
     .option('-s, --secret <s>', 'Secret from Git Webhook')
@@ -36,40 +42,43 @@ function update_repo(repo) {
     repo.fetch('origin').then(function() {
         console.log('setting head on repo');
         repo.setHead('FETCH_HEAD').then(function() {
-            console.log('checking out origin/master');
+            console.log(`${progname} checking out origin/master`);
             repo.checkoutBranch('origin/master').then(() => {
                 return repo.getReferenceCommit('refs/remotes/origin/master');
             }).catch((e) => {
-                console.log('unable to get reference commit:');
+                console.log(`${progname} ${red}unable to get reference commit`);
                 console.log(e);
+                console.log(`${reset}`);
             }).then(function (commit) {
                 Git.Reset.reset(repo, commit, 3, {});
             }).catch((e) => {
-                console.log('couldn\'t check out master');
+                console.log(`${progname} ${red}unable to check out master${reset}`);
             });
         }).catch((e) => {
-            console.log('Couldn\'t set head:');
+            console.log(`${progname} ${red}unable to set head`);
             console.log(e);
+            console.log(`${reset}`);
         });
     }).catch((e) => {
-        console.log('couldn\'t fetch origin:');
+        console.log(`${progname} ${red}unable to set origin`);
         console.log(e);
+        console.log(`${reset}`);
     });
 }
 
 function redeploy_repo(url, path, name) {
     mkdirp.sync(config.repo_root);
     var new_path = path + '/' + name;
-    console.log(`cloning ${url} into ${new_path} (${path} / ${name})`);
+    console.log(`${progname} cloning ${green}${url}${reset} into ${green}${new_path}${reset}`);
 
     var repo = Git.Repository.open(new_path)
         .then(update_repo)
         .catch((e) => {
-            console.log('unable to update, trying clone: ');
-            console.log(e);
+            console.log(`${progname} unable to update ${green}${url}${reset}, trying clone...`);
             Git.Clone(url, new_path).then(update_repo).catch((e) => {
-                console.log('unable to clone:');
+                console.log(`${progname} ${red}unable to clone:`);
                 console.log(e);
+                console.log(reset);
             });
         });
 }
@@ -126,43 +135,46 @@ var createHash = function(secret) {
     return(cipher.final('hex'));
 };
 
-const brown = '\033[33m',
-      green = '\033[32m',
-      reset = '\033[0m';
-
 io.on('connection', (socket) => {
     socket.on('multiplex-statechanged', (data) => {
         if (typeof data.secret == 'undefined' 
                 || data.secret == null
-                || data.secret === '')
+                || data.secret === '') {
+            console.log(`${brown}reveal.js:${reset} secret doesn't match (or is undefined)`);
             return;
+        }
         if (createHash(data.secret) === data.socketId) {
             data.secret = null;
             socket.broadcast.emit(data.socketId, data);
             console.log(`${brown}reveal.js:${reset} master on ${green}data.socketId${reset}`);
         }
+        else {
+            console.log(`${progname}given secret ${red}${data.secret}${reset} doesn't match`);
+        }
     });
 });
+
+function sendIndex(req, res) {
+    res.writeHead(200, {'Content-Type': 'text/html'});
+    res.write('<style>body{font-family: sans-serif;}</style><h2>reveal.js multiplex server.</h2><a href="/token">Generate token</a>');
+    res.end();
+}
 
 app.use(bodyParser.json()); // Parse application/json
 app.use(bodyParser.urlencoded({ extended: true })); // Parse application/x-www-form-urlencoded
 
-app.all(/\.git/, (req, res) => {
+app.all(/\/\.git/, (req, res) => {
     res.sendStatus(404);
 });
 app.post('/webhook', (req, res) => { return webhook(config, req, res); });
-app.get("/token", function(req,res) {
+app.get("/token", (req, res) => {
     var ts = new Date().getTime();
     var rand = Math.floor(Math.random()*9999999);
-    var origsecret = ts.toString() + rand.toString();
-    var cipher = crypto.createCipher('blowfish', origsecret);
+    var originalSecret = ts.toString() + rand.toString();
+    var cipher = crypto.createCipher('blowfish', originalSecret);
     var secret = cipher.final('hex');
     res.send({secret: secret, socketId: createHash(secret)});
 });
-app.get('/', (req, res) => {
-    res.writeHead(200, {'Content-Type': 'text/html'});
-    res.write('<style>body{font-family: sans-serif;}</style><h2>reveal.js multiplex server.</h2><a href="/token">Generate token</a>');
-    res.end();
-});
+app.get('/', sendIndex);
 app.use(express.static(config.repo_root));
-server.listen(config.port, config.addr, () => console.log(`Example app listening on port ${config.port}!`));
+server.listen(config.port, config.addr, () => console.log(`${progname} listening on port ${green}${config.port}${reset}`));
