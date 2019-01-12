@@ -33,6 +33,7 @@ There are some environment variables that can be used to configure the server:
 An example invocation would be:
 
 ```
+mkdir repo-root && chown 1000 repo-root
 docker run \
     -d \
     --restart unless-stopped \
@@ -41,5 +42,7 @@ docker run \
     -p 9119:80 \
     -e RV_PREFIXES=https://github.com/example \
     -e RV_SECRET=rvsecretkey \
+    -e RV_ROOT=/data \
+    -v $(pwd)/repo-root:/data \
     reveal-serve
 ```
